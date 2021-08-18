@@ -1,96 +1,65 @@
-import React, { Fragment, useEffect, useState } from 'react';
 import { Container } from 'semantic-ui-react';
-import { Activity } from '../models/activity';
-import { v4 as uuid } from 'uuid';
+import { observer } from 'mobx-react-lite';
+import { Route, Switch, useLocation } from 'react-router-dom';
 
 import Navbar from './navbar';
 import ActivityDashboard from '../../features/activities/dashboard/ActivityDashboard';
-import agent from '../api/agent';
+
+import HomePage from '../../features/home/HomePage';
+import ActivityForm from '../../features/activities/form/ActivityForm';
+import ActivityDetails from '../../features/activities/details/ActivityDetails';
+import { ToastContainer } from 'react-toastify';
+import NotFound from '../../features/errors/NotFound';
+import ServerError from '../../features/errors/ServerError';
+import LoginForm from '../../features/users/LoginForm';
+import { useStore } from '../stores/store';
+import { useEffect } from 'react';
 import LoadingComponent from './LoadingComponent';
+import ModalContainer from '../common/modals/ModalContainer';
 
 function App() {
+	const location = useLocation();
+	const { commonStore, userStore } = useStore();
 
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [selectedActivity, setSelectedActivity] = useState<Activity | undefined>(undefined);
-  const [editMode, setEditMode] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [submiting, setSubmiting] = useState(false);
+	useEffect(() => {
+		if(commonStore.token){
+			userStore.getUser().finally(() => commonStore.setApploaded());
+		}else{
+			commonStore.setApploaded();
+		}
+	}, [commonStore, userStore]);
 
-  useEffect(() => {
-    async function fetchActivities() {
-      try {
-        const activitiesResponse = await agent.Activities.list();
-        activitiesResponse.forEach(a => a.date = a.date.split('T')[0]);
-        setActivities(activitiesResponse);
-        setLoading(false);
-      } catch (error) {
-        setActivities([]);
-      }
-    }
+	if(!commonStore.appLoaded) return <LoadingComponent content='Loading app..' />
 
-    fetchActivities();
-  }, []);
-
-
-  function handleSelectActivity(id: string) {
-    setSelectedActivity(activities.find(x => x.id === id));
-  }
-
-  function handleCancelSelectActivity() { setSelectedActivity(undefined); }
-
-  function handleFormOpen(id?: string) {
-    id ? handleSelectActivity(id) : handleCancelSelectActivity();
-    setEditMode(true);
-  }
-
-  function handleFormClose() { setEditMode(false) }
-
-  async function handleCreateOrEdit(activity: Activity) {
-    setSubmiting(true);
-
-    if (activity.id) {
-      await agent.Activities.update(activity);
-      setActivities([...activities.filter(x => x.id !== activity.id), activity]);
- 
-    }else{
-      activity.id = uuid();
-      await agent.Activities.create(activity);
-      setActivities([...activities, activity]);
-    }
-
-    setSelectedActivity(activity);
-    setEditMode(false);
-    setSubmiting(false);
-  }
-
-  async function handleDeleteActivity(id: string) {
-    setSubmiting(true);
-    await agent.Activities.delete(id);
-    setActivities([...activities.filter(x => x.id !== id)]);
-    setSubmiting(false);
-  }
-
-  if (loading) return <LoadingComponent />
-
-  return (
-    <Fragment>
-      <Navbar openForm={handleFormOpen} />
-      <Container style={{ marginTop: '7em' }}>
-        <ActivityDashboard
-          activities={activities}
-          selectedActivity={selectedActivity}
-          selectActivity={handleSelectActivity}
-          cancelSelectActivity={handleCancelSelectActivity}
-          editMode={editMode}
-          openForm={handleFormOpen}
-          closeForm={handleFormClose}
-          createOrEdit={handleCreateOrEdit}
-          deleteActivity={handleDeleteActivity}
-          submiting={submiting}
-        />
-      </Container>
-    </Fragment>
-  );
+	return (
+		<>
+			<ToastContainer position='bottom-right' hideProgressBar />
+			<ModalContainer />
+			<Route path='/' component={HomePage} exact />
+			<Route
+				path={`/(.+)`}
+				render={() => (
+					<>
+						<Navbar />
+						<Container style={{ marginTop: '7em' }}>
+							<Switch>
+								<Route path='/activities' component={ActivityDashboard} exact />
+								<Route path='/activities/:id' component={ActivityDetails} />
+								<Route
+									path={['/createActivity', '/manage/:id']}
+									component={ActivityForm}
+									key={location.key}
+								/>
+								<Route component={ServerError} path='/server-error'/>
+								<Route component={LoginForm} path='/login'/>
+								<Route component={NotFound} />
+							</Switch>
+						</Container>
+					</>
+				)}
+			/>
+		</>
+	);
 }
 
-export default App;
+export default observer(App);
